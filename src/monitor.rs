@@ -1,5 +1,5 @@
 use rand::{thread_rng, Rng};
-use reqwest::header::{COOKIE, USER_AGENT};
+use reqwest::header::{CONTENT_TYPE, COOKIE, USER_AGENT};
 use serde::Deserialize;
 use std::time::{SystemTime, UNIX_EPOCH};
 use url::Url;
@@ -35,11 +35,16 @@ pub fn get_newest_video(
     let monitor_instance = match _url.host_str().unwrap() {
         "space.bilibili.com" => unsafe {
             if BILIBILI_MONITOR_INSTANCE.is_none() {
-                BILIBILI_MONITOR_INSTANCE = Some(BilibiliMonitor);
+                BILIBILI_MONITOR_INSTANCE = Some(Box::new(BilibiliMonitor));
             }
             BILIBILI_MONITOR_INSTANCE.as_ref().unwrap()
         },
-        // "www.kuaishou.com" => get_kuaishou_monitor_instance(),
+        "www.kuaishou.com" => unsafe {
+            if KUAISHOU_MONITOR_INSTANCE.is_none() {
+                KUAISHOU_MONITOR_INSTANCE = Some(Box::new(KuaishouMonitor));
+            }
+            KUAISHOU_MONITOR_INSTANCE.as_ref().unwrap()
+        },
         _ => {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
@@ -60,7 +65,7 @@ const BILIBILI_REFERER: &str = "https://space.bilibili.com/";
 
 static mut BILIBILI_WBI_KEYS: Option<(String, String)> = None;
 
-static mut BILIBILI_MONITOR_INSTANCE: Option<BilibiliMonitor> = None;
+static mut BILIBILI_MONITOR_INSTANCE: Option<Box<dyn Monitor>> = None;
 
 /// Bilibili monitor
 struct BilibiliMonitor;
@@ -315,5 +320,94 @@ impl BilibiliMonitor {
 /// Kuaishou
 /// ================================================================================================
 
+const KUAISHOU_MONITOR_API: &str = "https://www.kuaishou.com/graphql";
+const KUAISHOU_REFERER: &str = "https://www.kuaishou.com/profile/";
+
+static mut KUAISHOU_MONITOR_INSTANCE: Option<Box<dyn Monitor>> = None;
+
 /// Kuaishou monitor
 struct KuaishouMonitor;
+impl Monitor for KuaishouMonitor {
+    fn start_once(
+        &self,
+        url: &str,
+        cookies: Option<&str>,
+        show_offset: Option<&str>,
+        is_new_offset: Option<&str>,
+    ) -> (Vec<NewestVideo>, String) {
+        // e.g. https://www.kuaishou.com/profile/3xxcvi49q2r52gu
+        let _url = Url::parse(url).unwrap();
+        // e.g. /profile/3xxcvi49q2r52gu
+        let path = _url.path();
+        // e.g. 3xxcvi49q2r52gu
+        let id = &path[9..path.len()];
+
+        let body = r#"
+{
+    "operationName": "visionProfilePhotoList",
+    "variables": {
+        "userId": "{}",
+        "pcursor": "",
+        "page": "profile"
+    },
+    "query": "fragment photoContent on PhotoEntity {\n  __typename\n  id\n  duration\n  caption\n  originCaption\n  likeCount\n  viewCount\n  commentCount\n  realLikeCount\n  coverUrl\n  photoUrl\n  photoH265Url\n  manifest\n  manifestH265\n  videoResource\n  coverUrls {\n    url\n    __typename\n  }\n  timestamp\n  expTag\n  animatedCoverUrl\n  distance\n  videoRatio\n  liked\n  stereoType\n  profileUserTopPhoto\n  musicBlocked\n  riskTagContent\n  riskTagUrl\n}\n\nfragment recoPhotoFragment on recoPhotoEntity {\n  __typename\n  id\n  duration\n  caption\n  originCaption\n  likeCount\n  viewCount\n  commentCount\n  realLikeCount\n  coverUrl\n  photoUrl\n  photoH265Url\n  manifest\n  manifestH265\n  videoResource\n  coverUrls {\n    url\n    __typename\n  }\n  timestamp\n  expTag\n  animatedCoverUrl\n  distance\n  videoRatio\n  liked\n  stereoType\n  profileUserTopPhoto\n  musicBlocked\n  riskTagContent\n  riskTagUrl\n}\n\nfragment feedContent on Feed {\n  type\n  author {\n    id\n    name\n    headerUrl\n    following\n    headerUrls {\n      url\n      __typename\n    }\n    __typename\n  }\n  photo {\n    ...photoContent\n    ...recoPhotoFragment\n    __typename\n  }\n  canAddComment\n  llsid\n  status\n  currentPcursor\n  tags {\n    type\n    name\n    __typename\n  }\n  __typename\n}\n\nquery visionProfilePhotoList($pcursor: String, $userId: String, $page: String, $webPageArea: String) {\n  visionProfilePhotoList(pcursor: $pcursor, userId: $userId, page: $page, webPageArea: $webPageArea) {\n    result\n    llsid\n    webPageArea\n    feeds {\n      ...feedContent\n      __typename\n    }\n    hostName\n    pcursor\n    __typename\n  }\n}\n"
+}
+        "#;
+
+        let response = reqwest::blocking::Client::new()
+            .post(KUAISHOU_MONITOR_API)
+            .header(USER_AGENT, DEFAULT_USER_AGENT)
+            .header("referer", format!("{}{}", KUAISHOU_REFERER, id))
+            .header(COOKIE, cookies.unwrap_or(""))
+            .header(CONTENT_TYPE, "application/json")
+            .body(body.replace("{}", id))
+            .send()
+            .unwrap();
+
+        let json: serde_json::Value = response.json().unwrap();
+
+        let mut videos = Vec::new();
+        let mut next_offset: u64 = 0;
+
+        // data -> visionProfilePhotoList -> feeds
+        if let Some(vlist) = json["data"]["visionProfilePhotoList"]["feeds"].as_array() {
+            for video in vlist {
+                let id = video["photo"]["id"].as_str().unwrap();
+                let title = video["photo"]["caption"].as_str().unwrap();
+                let url = format!("https://www.kuaishou.com/short-video/{}", id);
+                let date = video["photo"]["timestamp"].as_u64().unwrap();
+
+                // offset
+                if let Some(offset) = show_offset {
+                    if date <= offset.parse::<u64>().unwrap() {
+                        continue;
+                    }
+                }
+
+                let is_new = if let Some(offset) = is_new_offset {
+                    date > offset.parse::<u64>().unwrap()
+                } else {
+                    true
+                };
+
+                videos.push(NewestVideo {
+                    id: id.to_string(),
+                    title: title.to_string(),
+                    url,
+                    date: date.to_string(),
+                    is_new,
+                });
+
+                if next_offset == 0 {
+                    next_offset = date;
+                } else if date > next_offset {
+                    next_offset = date;
+                }
+            }
+        } else {
+            println!("{:?}", json);
+        }
+
+        (videos, next_offset.to_string())
+    }
+}
