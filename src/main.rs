@@ -41,7 +41,7 @@ fn main() {
         };
 
         // 获取最新视频
-        match monitor::get_newest_video(asset.link.as_str(), None, show_offset, is_new_offset) {
+        match monitor::get_newest_video(asset.link.as_str(), config.cookies.clone(), show_offset, is_new_offset) {
             Ok((videos, next_offset)) => {
                 if videos.is_empty() {
                     println!("No new videos found.");

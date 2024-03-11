@@ -10,7 +10,7 @@ This is a simple command line application that monitors the status of a video pl
     - [ ] Kuaishou
     - [ ] Douyin
 - [x] Automatic recording of video updates
-- [ ] Support use cookies to access the platform
+- [x] Support use cookies to access the platform
 
 ## Usage
 
@@ -23,6 +23,10 @@ Download the latest release from the [release page](https://github.com/headone/v
 Create a configuration file named `config.toml` in the current directory. The configuration file is used to configure the monitoring platform and the recording function. The following is an example of the configuration file:
 
 ```toml
+[cookies]
+bilibili = "your bilibili cookies"
+xigua = "your xigua cookies"
+
 [[assets]]
 name = "B站用户"
 link = "https://space.bilibili.com/123123123"

@@ -1,3 +1,4 @@
+use crate::config_helper::CookieJar;
 use rand::{thread_rng, Rng};
 use reqwest::header::{CONTENT_TYPE, COOKIE, USER_AGENT};
 use serde::Deserialize;
@@ -27,23 +28,25 @@ pub struct NewestVideo {
 
 pub fn get_newest_video(
     url: &str,
-    cookies: Option<&str>,
+    cookies: Option<CookieJar>,
     show_offset: Option<&str>,
     is_new_offset: Option<&str>,
 ) -> Result<(Vec<NewestVideo>, String), std::io::Error> {
+    let mut _cookies = None;
+
     let _url = Url::parse(url).unwrap();
     let monitor_instance = match _url.host_str().unwrap() {
         "space.bilibili.com" => unsafe {
-            if BILIBILI_MONITOR_INSTANCE.is_none() {
-                BILIBILI_MONITOR_INSTANCE = Some(Box::new(BilibiliMonitor));
-            }
-            BILIBILI_MONITOR_INSTANCE.as_ref().unwrap()
+            _cookies = cookies
+                .as_ref()
+                .and_then(|c| c.bilibili.as_ref().map(|c| c.as_str()));
+            get_bilibili_monitor_instance()
         },
         "www.kuaishou.com" => unsafe {
-            if KUAISHOU_MONITOR_INSTANCE.is_none() {
-                KUAISHOU_MONITOR_INSTANCE = Some(Box::new(KuaishouMonitor));
-            }
-            KUAISHOU_MONITOR_INSTANCE.as_ref().unwrap()
+            _cookies = cookies
+                .as_ref()
+                .and_then(|c| c.kuaishou.as_ref().map(|c| c.as_str()));
+            get_kuaishou_monitor_instance()
         },
         _ => {
             return Err(std::io::Error::new(
@@ -53,7 +56,7 @@ pub fn get_newest_video(
         }
     };
 
-    Ok(monitor_instance.start_once(url, cookies, show_offset, is_new_offset))
+    Ok(monitor_instance.start_once(url, _cookies, show_offset, is_new_offset))
 }
 
 /// ================================================================================================
@@ -66,6 +69,15 @@ const BILIBILI_REFERER: &str = "https://space.bilibili.com/";
 static mut BILIBILI_WBI_KEYS: Option<(String, String)> = None;
 
 static mut BILIBILI_MONITOR_INSTANCE: Option<Box<dyn Monitor>> = None;
+
+fn get_bilibili_monitor_instance() -> &'static Box<dyn Monitor> {
+    unsafe {
+        if BILIBILI_MONITOR_INSTANCE.is_none() {
+            BILIBILI_MONITOR_INSTANCE = Some(Box::new(BilibiliMonitor));
+        }
+        BILIBILI_MONITOR_INSTANCE.as_ref().unwrap()
+    }
+}
 
 /// Bilibili monitor
 struct BilibiliMonitor;
@@ -324,6 +336,15 @@ const KUAISHOU_MONITOR_API: &str = "https://www.kuaishou.com/graphql";
 const KUAISHOU_REFERER: &str = "https://www.kuaishou.com/profile/";
 
 static mut KUAISHOU_MONITOR_INSTANCE: Option<Box<dyn Monitor>> = None;
+
+fn get_kuaishou_monitor_instance() -> &'static Box<dyn Monitor> {
+    unsafe {
+        if KUAISHOU_MONITOR_INSTANCE.is_none() {
+            KUAISHOU_MONITOR_INSTANCE = Some(Box::new(KuaishouMonitor));
+        }
+        KUAISHOU_MONITOR_INSTANCE.as_ref().unwrap()
+    }
+}
 
 /// Kuaishou monitor
 struct KuaishouMonitor;

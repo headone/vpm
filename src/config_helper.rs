@@ -6,6 +6,7 @@ use toml::value::{Date, Datetime};
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct Config {
     pub assets: Option<Vec<Asset>>,
+    pub cookies: Option<CookieJar>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
@@ -123,6 +124,12 @@ impl OffsetVec for Vec<Offset> {
         };
         self.retain(|offset| offset.date.date != date);
     }
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct CookieJar {
+    pub bilibili: Option<String>,
+    pub kuaishou: Option<String>,
 }
 
 // default config file path
