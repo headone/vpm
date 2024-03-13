@@ -47,3 +47,24 @@ Run the application in the command line:
 ```shell
 vpm
 ```
+## Build
+
+### 1. Clone the repository
+
+```shell
+git clone https://github.com/headone/vpm.git
+```
+
+### 2. Build
+
+```shell
+cargo build --release
+```
+
+#### Windows
+
+because of the influence of the upstream project [quickjs-rs](https://github.com/theduke/quickjs-rs?tab=readme-ov-file#windows-support), so if you want to build for windows, use the following command:
+
+```shell
+cargo build --release --target x86_64-pc-windows-gnu
+```
