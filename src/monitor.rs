@@ -36,18 +36,24 @@ pub fn get_newest_video(
 
     let _url = Url::parse(url).unwrap();
     let monitor_instance = match _url.host_str().unwrap() {
-        "space.bilibili.com" => unsafe {
+        "space.bilibili.com" => {
             _cookies = cookies
                 .as_ref()
                 .and_then(|c| c.bilibili.as_ref().map(|c| c.as_str()));
             get_bilibili_monitor_instance()
-        },
-        "www.kuaishou.com" => unsafe {
+        }
+        "www.kuaishou.com" => {
             _cookies = cookies
                 .as_ref()
                 .and_then(|c| c.kuaishou.as_ref().map(|c| c.as_str()));
             get_kuaishou_monitor_instance()
-        },
+        }
+        "www.ixigua.com" => {
+            _cookies = cookies
+                .as_ref()
+                .and_then(|c| c.ixigua.as_ref().map(|c| c.as_str()));
+            get_ixigua_monitor_instance()
+        }
         _ => {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
@@ -397,6 +403,104 @@ impl Monitor for KuaishouMonitor {
                 let title = video["photo"]["caption"].as_str().unwrap();
                 let url = format!("https://www.kuaishou.com/short-video/{}", id);
                 let date = video["photo"]["timestamp"].as_u64().unwrap();
+
+                // offset
+                if let Some(offset) = show_offset {
+                    if date <= offset.parse::<u64>().unwrap() {
+                        continue;
+                    }
+                }
+
+                let is_new = if let Some(offset) = is_new_offset {
+                    date > offset.parse::<u64>().unwrap()
+                } else {
+                    true
+                };
+
+                videos.push(NewestVideo {
+                    id: id.to_string(),
+                    title: title.to_string(),
+                    url,
+                    date: date.to_string(),
+                    is_new,
+                });
+
+                if next_offset == 0 {
+                    next_offset = date;
+                } else if date > next_offset {
+                    next_offset = date;
+                }
+            }
+        } else {
+            println!("{:?}", json);
+        }
+
+        (videos, next_offset.to_string())
+    }
+}
+
+/// ================================================================================================
+/// IXigua
+/// ================================================================================================
+
+const IXIGUA_MONITOR_API: &str = "https://www.ixigua.com/api/videov2/author/new_video_list";
+
+static mut IXIGUA_MONITOR_INSTANCE: Option<Box<dyn Monitor>> = None;
+
+fn get_ixigua_monitor_instance() -> &'static Box<dyn Monitor> {
+    unsafe {
+        if IXIGUA_MONITOR_INSTANCE.is_none() {
+            IXIGUA_MONITOR_INSTANCE = Some(Box::new(IXiguaMonitor));
+        }
+        IXIGUA_MONITOR_INSTANCE.as_ref().unwrap()
+    }
+}
+
+struct IXiguaMonitor;
+impl Monitor for IXiguaMonitor {
+    fn start_once(
+        &self,
+        url: &str,
+        cookies: Option<&str>,
+        show_offset: Option<&str>,
+        is_new_offset: Option<&str>,
+    ) -> (Vec<NewestVideo>, String) {
+        // https://www.ixigua.com/home/2497727299858013/
+        let _url = Url::parse(url).unwrap();
+        // /home/2497727299858013/
+        let path = _url.path();
+        // 2497727299858013
+        let mut id = &path[6..path.len()];
+        // if last char is '/', remove it
+        if id.ends_with('/') {
+            id = &id[0..id.len() - 1];
+        }
+
+        let response = reqwest::blocking::Client::new()
+            .get(IXIGUA_MONITOR_API)
+            .header(USER_AGENT, DEFAULT_USER_AGENT)
+            .header("referer", url)
+            .header(COOKIE, cookies.unwrap_or(""))
+            .query(&[
+                ("to_user_id", id),
+                ("offset", "0"),
+                ("limit", "10"),
+                ("order", "new"),
+            ])
+            .send()
+            .unwrap();
+
+        let json: serde_json::Value = response.json().unwrap();
+
+        let mut videos = Vec::new();
+        let mut next_offset: u64 = 0;
+
+        if let Some(vlist) = json["data"]["videoList"].as_array() {
+            for video in vlist {
+                let id = video["item_id"].as_str().unwrap();
+                let title = video["title"].as_str().unwrap();
+                let url = format!("https://www.ixigua.com/{}", id);
+                let date = video["publish_time"].as_u64().unwrap() * 1000;
 
                 // offset
                 if let Some(offset) = show_offset {

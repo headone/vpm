@@ -130,6 +130,7 @@ impl OffsetVec for Vec<Offset> {
 pub struct CookieJar {
     pub bilibili: Option<String>,
     pub kuaishou: Option<String>,
+    pub ixigua: Option<String>,
 }
 
 // default config file path

@@ -6,7 +6,7 @@ This is a simple command line application that monitors the status of a video pl
 
 - [x] Monitor author video updates
     - [x] Bilibili
-    - [ ] Xigua
+    - [x] Xigua
     - [x] Kuaishou
     - [ ] Douyin
 - [x] Automatic recording of video updates
