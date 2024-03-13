@@ -5,10 +5,12 @@ This is a simple command line application that monitors the status of a video pl
 ## Features
 
 - [x] Monitor author video updates
-    - [x] Bilibili
-    - [x] Xigua
-    - [x] Kuaishou
-    - [x] Douyin
+  - [x] Bilibili
+    > Quoted from [bilibili-API-collect](https://github.com/SocialSisterYi/bilibili-API-collect)
+  - [x] Xigua
+  - [x] Kuaishou
+  - [x] Douyin
+    > Quoted from [Spider_DouYin_Videos](https://github.com/huifeng-kooboo/Spider_DouYin_Videos)
 - [x] Automatic recording of video updates
 - [x] Support use cookies to access the platform
 
