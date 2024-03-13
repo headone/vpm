@@ -3,6 +3,7 @@ use std::io;
 
 mod config_helper;
 mod monitor;
+mod x_bogus_js;
 
 fn main() {
     // config path

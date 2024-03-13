@@ -1,4 +1,6 @@
 use crate::config_helper::CookieJar;
+use crate::x_bogus_js;
+use quick_js::Context;
 use rand::{thread_rng, Rng};
 use reqwest::header::{CONTENT_TYPE, COOKIE, USER_AGENT};
 use serde::Deserialize;
@@ -53,6 +55,12 @@ pub fn get_newest_video(
                 .as_ref()
                 .and_then(|c| c.ixigua.as_ref().map(|c| c.as_str()));
             get_ixigua_monitor_instance()
+        }
+        "www.douyin.com" => {
+            _cookies = cookies
+                .as_ref()
+                .and_then(|c| c.douyin.as_ref().map(|c| c.as_str()));
+            get_douyin_monitor_instance()
         }
         _ => {
             return Err(std::io::Error::new(
@@ -391,7 +399,10 @@ impl Monitor for KuaishouMonitor {
             .send()
             .unwrap();
 
-        let json: serde_json::Value = response.json().unwrap();
+        let json: serde_json::Value = response
+            .json()
+            .and_then(|j| Ok(j))
+            .unwrap_or(serde_json::Value::Null);
 
         let mut videos = Vec::new();
         let mut next_offset: u64 = 0;
@@ -490,7 +501,10 @@ impl Monitor for IXiguaMonitor {
             .send()
             .unwrap();
 
-        let json: serde_json::Value = response.json().unwrap();
+        let json: serde_json::Value = response
+            .json()
+            .and_then(|j| Ok(j))
+            .unwrap_or(serde_json::Value::Null);
 
         let mut videos = Vec::new();
         let mut next_offset: u64 = 0;
@@ -534,5 +548,121 @@ impl Monitor for IXiguaMonitor {
         }
 
         (videos, next_offset.to_string())
+    }
+}
+
+///=================================================================================================
+/// Douyin
+///=================================================================================================
+
+const DOUYIN_MONITOR_API: &str = "https://www.douyin.com/aweme/v1/web/aweme/post/";
+
+static mut DOUYIN_MONITOR_INSTANCE: Option<Box<dyn Monitor>> = None;
+
+fn get_douyin_monitor_instance() -> &'static Box<dyn Monitor> {
+    unsafe {
+        if DOUYIN_MONITOR_INSTANCE.is_none() {
+            DOUYIN_MONITOR_INSTANCE = Some(Box::new(DouyinMonitor));
+        }
+        DOUYIN_MONITOR_INSTANCE.as_ref().unwrap()
+    }
+}
+
+struct DouyinMonitor;
+impl Monitor for DouyinMonitor {
+    fn start_once(
+        &self,
+        url: &str,
+        cookies: Option<&str>,
+        show_offset: Option<&str>,
+        is_new_offset: Option<&str>,
+    ) -> (Vec<NewestVideo>, String) {
+        // https://www.douyin.com/user/MS4wLjABAAAA
+        let _url = Url::parse(url).unwrap();
+        // /user/MS4wLjABAAAA
+        let path = _url.path();
+        // MS4wLjABAAAA
+        let id = &path[6..path.len()];
+        let query = format!("aid=6383&sec_user_id={}&count=10&max_cursor=0&cookie_enabled=true&platform=PC&downlink=10", id);
+
+        // x-bogus
+        let x_bogus = self.calc_x_bogus(&query, DEFAULT_USER_AGENT);
+        let query = format!("{}&X-Bogus={}", query, x_bogus);
+
+        let api = format!("{}?{}", DOUYIN_MONITOR_API, query);
+
+        let response = reqwest::blocking::Client::new()
+            .get(api)
+            .header(USER_AGENT, DEFAULT_USER_AGENT)
+            .header(COOKIE, cookies.unwrap_or(""))
+            .send()
+            .unwrap();
+
+        let json: serde_json::Value = response
+            .json()
+            .and_then(|j| Ok(j))
+            .unwrap_or(serde_json::Value::Null);
+
+        let mut videos = Vec::new();
+        let mut next_offset: u64 = 0;
+
+        if let Some(vlist) = json["aweme_list"].as_array() {
+            for video in vlist {
+                let id = video["aweme_id"].as_str().unwrap();
+                let title = video["desc"].as_str().unwrap();
+                let url = format!("https://www.douyin.com/video/{}", id);
+                let date = video["create_time"].as_u64().unwrap() * 1000;
+
+                // offset
+                if let Some(offset) = show_offset {
+                    if date <= offset.parse::<u64>().unwrap() {
+                        continue;
+                    }
+                }
+
+                let is_new = if let Some(offset) = is_new_offset {
+                    date > offset.parse::<u64>().unwrap()
+                } else {
+                    true
+                };
+
+                videos.push(NewestVideo {
+                    id: id.to_string(),
+                    title: title.to_string(),
+                    url,
+                    date: date.to_string(),
+                    is_new,
+                });
+
+                if next_offset == 0 {
+                    next_offset = date;
+                } else if date > next_offset {
+                    next_offset = date;
+                }
+            }
+        } else {
+            println!("{:?}", json);
+        }
+
+        (videos, next_offset.to_string())
+    }
+}
+
+impl DouyinMonitor {
+    fn calc_x_bogus(&self, query: &str, user_agent: &str) -> String {
+        let context = Context::new().unwrap();
+        context
+            .eval(
+                format!(
+                    "{}\n;sign(`{}`, `{}`);",
+                    x_bogus_js::X_BOGUS_JS,
+                    query,
+                    user_agent
+                )
+                .as_str(),
+            )
+            .unwrap()
+            .into_string()
+            .unwrap()
     }
 }

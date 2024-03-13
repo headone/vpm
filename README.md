@@ -8,7 +8,7 @@ This is a simple command line application that monitors the status of a video pl
     - [x] Bilibili
     - [x] Xigua
     - [x] Kuaishou
-    - [ ] Douyin
+    - [x] Douyin
 - [x] Automatic recording of video updates
 - [x] Support use cookies to access the platform
 
