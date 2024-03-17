@@ -15,27 +15,57 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v3
-    - name: Build
-      run: cargo build --release --target x86_64-pc-windows-gnu
+      - uses: actions/checkout@v3
+      - name: Build
+        run: cargo build --release --target x86_64-pc-windows-gnu
 
-    - name: Upload Artifact[win-x64]
-      uses: actions/upload-artifact@v2
-      with:
-        name: vpm_win-x64
-        path: target/x86_64-pc-windows-gnu/release/vpm.exe
+      - name: Upload Artifact[win-x64]
+        uses: actions/upload-artifact@v2
+        with:
+          name: vpm_win-x64
+          path: target/x86_64-pc-windows-gnu/release/vpm.exe
 
   build-linux-x64:
 
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
-    - name: Build
-      run: cargo build --release
+      - uses: actions/checkout@v3
+      - name: Build
+        run: cargo build --release
 
-    - name: Upload Artifact[linux-x64]
-      uses: actions/upload-artifact@v2
-      with:
-        name: vpm_linux-x64
-        path: target/release/vpm
+      - name: Upload Artifact[linux-x64]
+        uses: actions/upload-artifact@v2
+        with:
+          name: vpm_linux-x64
+          path: target/release/vpm
+
+  build-macos-x64:
+
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build
+        run: cargo build --release
+
+      - name: Upload Artifact[macos-x64]
+        uses: actions/upload-artifact@v2
+        with:
+          name: vpm_macos-x64
+          path: target/release/vpm
+
+  build-macos-arm64:
+
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build
+        run: cargo build --release --target aarch64-apple-darwin
+
+      - name: Upload Artifact[macos-arm64]
+        uses: actions/upload-artifact@v2
+        with:
+          name: vpm_macos-arm64
+          path: target/aarch64-apple-darwin/release/vpm
