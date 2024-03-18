@@ -54,18 +54,3 @@ jobs:
         with:
           name: vpm_macos-x64
           path: target/release/vpm
-
-  build-macos-arm64:
-
-    runs-on: macos-latest
-
-    steps:
-      - uses: actions/checkout@v3
-      - name: Build
-        run: cargo build --release --target aarch64-apple-darwin
-
-      - name: Upload Artifact[macos-arm64]
-        uses: actions/upload-artifact@v2
-        with:
-          name: vpm_macos-arm64
-          path: target/aarch64-apple-darwin/release/vpm
